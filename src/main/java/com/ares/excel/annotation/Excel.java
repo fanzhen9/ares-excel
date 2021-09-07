@@ -1,5 +1,7 @@
 package com.ares.excel.annotation;
 
+import com.ares.excel.service.impl.DefaultDownLoadImageService;
+
 import java.lang.annotation.*;
 
 /**
@@ -33,4 +35,10 @@ public @interface Excel {
      * @return
      */
     Class fieldClassType() default String.class;
+
+    /**
+     * 图片下载类
+     * @return
+     */
+    Class DownLoadImageService() default DefaultDownLoadImageService.class;
 }
