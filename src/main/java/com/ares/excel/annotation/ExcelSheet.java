@@ -10,16 +10,9 @@ import java.lang.annotation.*;
 @Documented
 public @interface ExcelSheet {
 
-
-    /**
-     * sheet 索引
-     * @return
-     */
-    int index();
-
     /**
      * sheet 名称
      * @return
      */
-    String name();
+    String name() default "";
 }

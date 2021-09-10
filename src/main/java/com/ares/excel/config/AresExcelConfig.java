@@ -9,8 +9,6 @@ public class AresExcelConfig {
 
     private String idGenerate;
 
-    private String downLoadImageService;
-
     public String getFilePath() {
         return filePath;
     }
@@ -25,13 +23,5 @@ public class AresExcelConfig {
 
     public void setIdGenerate(String idGenerate) {
         this.idGenerate = idGenerate;
-    }
-
-    public String getDownLoadImageService() {
-        return downLoadImageService;
-    }
-
-    public void setDownLoadImageService(String downLoadImageService) {
-        this.downLoadImageService = downLoadImageService;
     }
 }

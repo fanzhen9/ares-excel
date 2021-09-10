@@ -40,5 +40,5 @@ public @interface Excel {
      * 图片下载类
      * @return
      */
-    Class DownLoadImageService() default DefaultDownLoadImageService.class;
+    Class downLoadImageService() default DefaultDownLoadImageService.class;
 }

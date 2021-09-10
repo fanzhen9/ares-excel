@@ -1,6 +1,7 @@
 package com.ares.excel.config;
 
 import com.ares.excel.service.ExcelService;
+import com.ares.excel.service.ZipService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -32,6 +33,11 @@ public class EnabelAutoConfiguration {
         return new ThreadPoolExecutor(core, core,
                 60L, TimeUnit.SECONDS,blockingQueue
         );
+    }
+
+    @Bean
+    public ZipService zipService(AresExcelConfig aresExcelConfig){
+        return new ZipService(aresExcelConfig);
     }
 
     @Bean

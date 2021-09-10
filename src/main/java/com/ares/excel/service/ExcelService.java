@@ -1,9 +1,10 @@
 package com.ares.excel.service;
 
 import com.ares.excel.annotation.Excel;
+import com.ares.excel.annotation.ExcelSheet;
 import com.ares.excel.config.AresExcelConfig;
 import com.ares.excel.dl.Data;
-import com.ares.excel.exception.Aresexception;
+import com.ares.excel.dl.DataL;
 import com.ares.excel.service.impl.DefaultDownLoadImageService;
 import com.ares.excel.service.impl.UUIDIdGenerate;
 import org.apache.poi.common.usermodel.HyperlinkType;
@@ -14,15 +15,21 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ExcelService {
 
@@ -47,7 +54,7 @@ public class ExcelService {
      */
     public void writeExcel(List<Data> list){
         String id = getSimpleId();
-        writeExcel(list,id,null);
+        writeExcel(list,id);
     }
 
     private String getSimpleId() {
@@ -73,18 +80,10 @@ public class ExcelService {
     }
 
     /**
-     * 导出excle
-     * @param list
-     */
-    public <T> void writeExcel(List<Data> list,String id){
-        writeExcel(list,id,null);
-    }
-
-    /**
      * 导出excel
      * @param lists
      */
-    public void writeExcel(List<Data> lists, String id,DownLoadImageService downLoadImageService){
+    public void writeExcel(List<Data> lists, String id){
         if(lists.size()!=0){
             //TODO 最后设计枚举报错内容
             //throw new Aresexception();
@@ -102,8 +101,21 @@ public class ExcelService {
             //开始拼excel
 
             //构建sheet
-            XSSFSheet createSheet = workbook.createSheet();
             Class clazz = lists.get(i).getClazz();
+            XSSFSheet createSheet;
+            if(clazz.isAnnotationPresent(ExcelSheet.class)){
+                ExcelSheet annotation = (ExcelSheet) clazz.getAnnotation(ExcelSheet.class);
+                String name = annotation.name();
+                if(!StringUtils.isEmpty(name)){
+                    createSheet = workbook.createSheet(name);
+                }else{
+                    createSheet = workbook.createSheet();
+                }
+            }else{
+                createSheet = workbook.createSheet();
+            }
+
+
             Field[] fields = clazz.getDeclaredFields();
             //创建第一行
             XSSFRow row = createSheet.createRow(0);
@@ -125,17 +137,17 @@ public class ExcelService {
 
             Semaphore semaphore = new Semaphore(20);
             final CountDownLatch countDownLatch = new CountDownLatch(datalist.size() * urlCount);
-            for (int j = 0; i < datalist.size(); j++) {
-                XSSFRow dataRow = createSheet.createRow(i+1);
+            for (int j = 0; j < datalist.size(); j++) {
+                XSSFRow dataRow = createSheet.createRow(j+1);
                 Field[] dataFields = clazz.getDeclaredFields();
-                Object t = datalist.get(i);
+                Object t = datalist.get(j);
                 for (Field field : dataFields) {
                     if(field.isAnnotationPresent(Excel.class)){
                         Excel annotation = field.getAnnotation(Excel.class);
                         Integer index = annotation.index();
                         boolean url = annotation.isUrl();
                         Class classType = annotation.fieldClassType();
-                        Class loadImageService = annotation.DownLoadImageService();
+                        Class loadImageService = annotation.downLoadImageService();
 
                         XSSFCell cell = dataRow.createCell(index);
                         try {
@@ -204,6 +216,154 @@ public class ExcelService {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
+            try {
+                File file = new File(aresExcelConfig.getFilePath()+"/"+id);
+                if(!file.exists()){
+                    file.mkdirs();
+                }
+                FileOutputStream fileOut = new FileOutputStream(aresExcelConfig.getFilePath()+"/"+id+"/"+id+".xlsx");
+                workbook.write(fileOut);
+                fileOut.close();
+            }catch (Exception e){
+                e.printStackTrace();
+
+            }
         }
+    }
+
+    private Pattern pattern = Pattern.compile("\\{\\.(.*)\\}");
+
+    /**
+     * 模板导出
+     * @param inputStream
+     * @param lists
+     */
+    public void writeExcel(InputStream inputStream,List<Data> lists,String id){
+        try {
+            XSSFWorkbook workbook = new XSSFWorkbook(inputStream);
+            int sheetNum = lists.size();
+            for (int i = 0; i < sheetNum; i++) {
+                XSSFSheet sheet = workbook.getSheetAt(i);
+                //get all field
+                XSSFRow row = sheet.getRow(1);
+                int physicalNumberOfCells = row.getPhysicalNumberOfCells();
+                List<DataL> list = new ArrayList<>();
+                for (int j = 0; j < physicalNumberOfCells; j++) {
+                    String key = row.getCell(j).getStringCellValue();
+                    Matcher matcher = pattern.matcher(key);
+                    if (matcher.find()) {
+                        list.add(new DataL(j,matcher.group(1)));
+                    }
+                }
+                //getData
+                List dataList = lists.get(i).getList();
+                Class dataType = lists.get(i).getClazz();
+                for (int k=0 ; k<dataList.size() ; k++) {
+                    XSSFRow rowM = sheet.getRow(k+1);
+                    if(rowM == null){
+                        rowM = sheet.createRow(k+1);
+                    }
+                    for (DataL dataL : list) {
+                        Object obj = dataList.get(k);
+                        String keyName = dataL.getKeyName();
+                        String str1 = keyName.substring(0, 1);
+                        String str2 = keyName.substring(1);
+                        String methodName = "get" + str1.toUpperCase() + str2;
+                        Method method = dataType.getMethod(methodName);
+                        Object object = method.invoke(obj);
+                        Class classType = dataType.getDeclaredField(keyName).getType();
+                        XSSFCell cell = rowM.getCell(dataL.getIndex());
+                        if(cell == null){
+                            cell = rowM.createCell(dataL.getIndex());
+                        }
+                        if (object == null) {
+                            classType = String.class;
+                            object = "";
+                        }
+                        if(String.class == classType){
+                            cell.setCellValue(String.valueOf(object));
+                        }
+                        if(Double.class == classType||Integer.class == classType){
+                            cell.setCellValue(Double.valueOf(String.valueOf(object)));
+                        }
+                        if(Date.class == classType){
+                            cell.setCellValue((Date)object);
+                        }
+                        if(Boolean.class == classType){
+                            cell.setCellValue(Boolean.valueOf(String.valueOf(object)));
+                        }
+                    }
+                }
+            }
+            File file = new File(aresExcelConfig.getFilePath()+"/"+id);
+            if(!file.exists()){
+                file.mkdirs();
+            }
+            FileOutputStream fileOut = new FileOutputStream(aresExcelConfig.getFilePath()+"/"+id+"/"+id+".xlsx");
+            workbook.write(fileOut);
+            fileOut.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (NoSuchMethodException e){
+            e.printStackTrace();
+        } catch (InvocationTargetException e) {
+            e.printStackTrace();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (NoSuchFieldException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     *
+     * @param is
+     * @param clazz
+     * @param readline
+     * @param <T>
+     * @return
+     */
+    public <T> List<T> readExcel(InputStream is,int sheetIndex,Class<T> clazz,int readline) throws IllegalAccessException, InstantiationException, NoSuchMethodException, InvocationTargetException, IOException {
+        XSSFWorkbook workbook = new XSSFWorkbook(is);
+        XSSFSheet sheetAt = workbook.getSheetAt(sheetIndex);
+        Integer rows = sheetAt.getLastRowNum();
+
+        List<T> result = new ArrayList<T>();
+        for (; readline <= rows; readline++) {
+            XSSFRow row = sheetAt.getRow(readline);
+            T t = clazz.newInstance();
+            Field[] declaredFields = clazz.getDeclaredFields();
+            for (Field field : declaredFields) {
+                if(field.isAnnotationPresent(Excel.class)){
+                    Excel annotation = field.getAnnotation(Excel.class);
+                    int columnIndex = annotation.index();
+                    Class aClass = annotation.fieldClassType();
+                    String methodName = field.getName();
+                    String str1 = methodName.substring(0, 1);
+                    String str2 = methodName.substring(1);
+                    String methodSet = "set" + str1.toUpperCase() + str2;
+                    Method method = clazz.getMethod(methodSet,aClass);
+                    XSSFCell cell = row.getCell(columnIndex);
+                    if(String.class == aClass && cell != null){
+                        String value = cell.getStringCellValue();
+                        method.invoke(t,value);
+                    }
+                    if((Integer.class == aClass||Double.class == aClass||Float.class == aClass) && cell != null){
+                        double value = cell.getNumericCellValue();
+                        method.invoke(t,aClass.cast(value));
+                    }
+                    if(Boolean.class == aClass && cell != null){
+                        boolean value = cell.getBooleanCellValue();
+                        method.invoke(t,aClass.cast(value));
+                    }
+                    if(Date.class == aClass && cell != null){
+                        Date value = cell.getDateCellValue();
+                        method.invoke(t,aClass.cast(value));
+                    }
+                }
+            }
+            result.add(t);
+        }
+        return result;
     }
 }
