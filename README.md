@@ -76,7 +76,7 @@
 
   也可以使用模板方式,提前准备好需要的模板
 
-  ![image-20210909152021206](C:\Users\fox\AppData\Roaming\Typora\typora-user-images\image-20210909152021206.png)
+  ![模板](https://images.gitee.com/uploads/images/2021/0910/095544_7b1b543b_1751523.png "屏幕截图.png")
 
   只要和类字段保持一致，就可以导出 格式是{.xxx}
 
